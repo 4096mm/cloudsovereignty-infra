@@ -1,0 +1,147 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./db/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db/ssl-init.sh:/docker-entrypoint-initssl.sh
+    networks:
+      - cloudsovereignty
+    command: ["bash", "/docker-entrypoint-initssl.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  order-domain:
+    build:
+      context: ../../cloudsovereignty-orderdomain
+      dockerfile: Dockerfile
+    ports:
+      - "8081:9080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: development
+      HTTP_PORT: 9080
+      HTTPS_PORT: 9443
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${ORDER_DB_NAME}
+      DB_SCHEMA: public
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MANUFACTURE_WORKORDER_URL: http://manufacture-domain:9080/manufacturedomain/workorder
+      MANUFACTURE_USER: testuser
+      MANUFACTURE_PASSWORD: pwd
+    networks:
+      - cloudsovereignty
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9080/api/docs || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 100
+
+  supplier-domain:
+    build:
+      context: ../../cloudsovereignty-supplierdomain
+      dockerfile: Dockerfile
+    ports:
+      - "8082:9080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: development
+      HTTP_PORT: 9080
+      HTTPS_PORT: 9443
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${SUPPLIER_DB_NAME}
+      DB_SCHEMA: public
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MANUFACTURE_DELIVER_URL: http://manufacture-domain:9080/manufacturedomain/component/deliver
+      MANUFACTURE_USER: testuser
+      MANUFACTURE_PASSWORD: pwd
+    networks:
+      - cloudsovereignty
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9080/api/docs || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 100
+
+  manufacture-domain:
+    build:
+      context: ../../cloudsovereignty-manufacturerdomain
+      dockerfile: Dockerfile
+    ports:
+      - "8083:9080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: development
+      HTTP_PORT: 9080
+      HTTPS_PORT: 9443
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${MANUFACTURE_DB_NAME}
+      DB_SCHEMA: public
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SUPPLIER_PURCHASE_URL: http://supplier-domain:9080/supplierdomain/supplier/purchase
+      SUPPLIER_USER: orderer
+      SUPPLIER_PASSWORD: pwd
+    networks:
+      - cloudsovereignty
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9080/api/docs || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 100
+  showcase-driver:
+    build: 
+      context: ../../cloudsovereignty-driver
+      dockerfile: Dockerfile
+    entrypoint: ./single.sh
+    depends_on:
+      supplier-domain:
+        condition: service_healthy
+      order-domain:
+        condition: service_healthy
+      manufacture-domain:
+        condition: service_healthy
+    environment:
+      - GATLING_BASEURL_SUPPLIERDOMAIN=http://supplier-domain:9080
+      - GATLING_BASEURL_ORDERDOMAIN=http://order-domain:9080
+      - GATLING_BASEURL_MANUFACTUREDOMAIN=http://manufacture-domain:9080
+      - GATLING_NR_USERS=1
+      - GATLING_MAX_DURATION=1
+      - GATLING_RAMPUP_TIME=10
+      - GATLING_NR_USERS_AT_ONCE=0
+    volumes:
+      - ./results:/build/target/gatling
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 65535
+        hard: 65535
+    networks:
+      - cloudsovereignty
+      
+networks:
+  cloudsovereignty:
+    driver: bridge
+
+volumes:
+  postgres_data:

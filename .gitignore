@@ -1,0 +1,8 @@
+sa-key-*
+*key.json
+*.tfstate
+.env
+compose/results
+argocd-install.yaml
+kubeconfig.yaml
+**/.terraform/**/*
