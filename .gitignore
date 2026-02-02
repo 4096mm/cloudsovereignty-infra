@@ -1,6 +1,8 @@
 sa-key-*
 *key.json
 *.tfstate
+*.tfstate.*
+*.tfstate.backup
 .env
 compose/results
 argocd-install.yaml
