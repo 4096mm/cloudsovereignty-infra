@@ -1,7 +1,7 @@
 resource "stackit_postgresflex_instance" "main" {
   project_id      = var.stackit_project_id
   name            = "main"
-  acl             = ["0.0.0.0/0"]
+  acl             = ["0.0.0.0/0"] # Allow connections from any IP (for demo purposes)
   backup_schedule = "00 00 * * *"
   flavor = {
     cpu = 2
